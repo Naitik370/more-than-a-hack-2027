@@ -137,7 +137,7 @@ def main():
     os.makedirs(args.out, exist_ok=True)
     path = os.path.join(args.out, args.name + ".csv")
     write_submission(path, labels)
-    print("wrote", os.path.relpath(path, ROOT))
+    print("wrote", os.path.abspath(path))
     print(summary(labels))
 
 

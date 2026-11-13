@@ -83,9 +83,12 @@ def out_of_bounds(ball, margin):
 
 
 def activity(players, half_width):
-    """Mean speed of the tracked players, smoothed. Low while play is stopped."""
-    with np.errstate(invalid="ignore"):
-        per_frame = np.nanmean(players[:, :, 2], axis=1)
+    """Mean of the tracked players' speed channel, smoothed. Low while play is stopped."""
+    speed = players[:, :, 2]
+    finite = np.isfinite(speed)
+    n = finite.sum(axis=1)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        per_frame = np.where(n > 0, np.where(finite, speed, 0).sum(axis=1) / n, np.nan)
     return moving_mean(per_frame, half_width)
 
 

@@ -3,8 +3,11 @@
 The raw text file is ~190 MB and takes a while to parse; every later step reads the .npz instead.
 Nothing here interprets the data, it only changes its container.
 
-    players  float32 (n_frames, n_slots, 3)   x, y in metres, speed in m/s; NaN where missing
-    ball     float32 (n_frames, 3)            same
+    players  float32 (n_frames, n_slots, 3)   x, y in metres, then the ATD speed channel; NaN
+                                              where missing. The XML calls that channel kph, but
+                                              its values look like m/s (median ~1.3, p99 ~6.4).
+                                              It is only used through learned likelihood ratios.
+    ball     float32 (n_frames, 3)            same; the ball's speed channel is not used
     team     int8    (n_slots,)               0 home, 1 away
 
 Row i is video frame i (ATD frame_id i + 1). The cache lives in solution/cache/, which is
@@ -28,11 +31,15 @@ CACHE_DIR = os.path.join(HERE, "cache")
 
 
 def team_of_each_track(meta_path):
-    """0 if the slot belongs to the home team (first team in the file), 1 if away."""
+    """0 if the slot belongs to the home team (Score@idLocalTeam), 1 if away."""
     root = ET.parse(meta_path).getroot()
-    home_id = [team.get("id") for team in root.iter("Team")][0]
-    return np.array([0 if p.get("teamId") == home_id else 1 for p in root.iter("Player")],
-                    dtype=np.int8)
+    score = root.find(".//Score")
+    home_id = score.get("idLocalTeam")
+    away_id = score.get("idVisitingTeam")
+    slots = [p.get("teamId") for p in root.iter("Player")]
+    if not set(slots) <= {home_id, away_id}:
+        raise ValueError("track slots name a team that is neither local nor visiting")
+    return np.array([0 if team_id == home_id else 1 for team_id in slots], dtype=np.int8)
 
 
 def parse_atd(raw_path, n_frames, n_slots, pitch):
