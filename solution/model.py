@@ -38,19 +38,23 @@ PARAMS = {
     "dead_spell_s": 20.0,          # a restart typically takes 10-30 s
     "turnover_every_s": 15.0,      # ~200-250 changes of possession over the live ball
     # --- alive/dead
-    "dead_weight": 2.0,            # set so the match has ~100-110 stoppages (typical LaLiga count)
+    "dead_weight": 2.0,            # gives ~100 dead spells: a typical LaLiga match has ~100-110 restarts
     "oob_margin_m": 1.0,           # tracking noise; the whole ball must be over the line
     "oob_dead": 10.0,              # nats/s for a ball clearly outside the pitch
     "activity_half_width_s": 1.0,
     "activity_edges": [0, .5, .75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 99],
     "speed_edges": [0, 1, 2, 4, 8, 15, 99],
     # --- who has it (nats per second, + favours home)
-    "control_radius_m": 1.5,       # ball within reach of a player
+    # Control = the ball is within reach of a player AND moving with him. Proximity alone counts
+    # every pass and long ball that flies past a player.
+    "control_radius_m": 1.5,       # within reach of a player
     "control_softness_m": 0.3,     # tracking error on a player's position
-    # ~0.6 s of sole control (or two quick touches) by the other team outweighs one turnover
-    # (~6 nats); a single deflection (<0.7 s) cannot pay for a turnover and its reversal (~12).
-    "control_gain": 25.0,          # set so the match has ~250-300 possessions (typical, see README)
-    "control_fast_mps": 8.0,       # faster than this past a player is a pass, not control
+    "control_relative_mps": 2.0,   # ball speed relative to the player: a dribbling touch
+    "control_fast_mps": 8.0,       # (fallback when control_relative_mps is 0)
+    # The one rate-like constant of the team chain: calibrated, without labels, so the match has
+    # ~270 possessions -- turnovers (~200) plus restarts by the same team (~50 of ~100) in a
+    # typical top-flight match. See solution/diagnostics.py.
+    "control_gain": 84.0,
     "tag_gain_missing": 1.0,       # Smart Tagging phase team, when the ball is not visible
     "tag_gain_present": 0.3,
 }

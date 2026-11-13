@@ -30,7 +30,7 @@ def build_signals(data, events, p):
     players, ball, team = data["players"], data["ball"], data["team"]
     n = len(ball)
     present = np.isfinite(ball[:, 0])
-    d_home, d_away = F.team_distances(players, ball, team)
+    (d_home, rel_home), (d_away, rel_away) = F.team_contacts(players, ball, team)
     tag_vote, set_piece = F.tagging_prior(events, n)
     return {
         "present": present,
@@ -39,6 +39,8 @@ def build_signals(data, events, p):
         "activity": F.activity(players, int(round(p["activity_half_width_s"] * F.FPS))),
         "d_home": d_home,
         "d_away": d_away,
+        "rel_home": rel_home,
+        "rel_away": rel_away,
         "tag_vote": tag_vote,
         "set_piece": set_piece,
     }
@@ -65,7 +67,16 @@ def team_evidence(sig, p):
     with np.errstate(over="ignore"):
         c_home = 1.0 / (1.0 + np.exp((sig["d_home"] - r) / soft))
         c_away = 1.0 / (1.0 + np.exp((sig["d_away"] - r) / soft))
-    slow = 1.0 / (1.0 + (speed / p["control_fast_mps"]) ** 4)
+    if p["control_relative_mps"]:
+        # Control = close AND moving with the player. Unknown relative speed counts as moving.
+        def with_player(rel):
+            rel = np.nan_to_num(rel, nan=99.0)
+            return 1.0 / (1.0 + (rel / p["control_relative_mps"]) ** 2)
+        c_home = c_home * with_player(sig["rel_home"])
+        c_away = c_away * with_player(sig["rel_away"])
+        slow = 1.0
+    else:
+        slow = 1.0 / (1.0 + (speed / p["control_fast_mps"]) ** 4)
     evidence = p["control_gain"] * slow * (c_home * (1 - c_away) - c_away * (1 - c_home))
     tag = np.clip(sig["tag_vote"], -1, 1)
     evidence += np.where(sig["present"], p["tag_gain_present"], p["tag_gain_missing"]) * tag

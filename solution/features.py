@@ -47,15 +47,32 @@ def ball_speed(ball):
     return speed
 
 
-def team_distances(players, ball, team):
-    """Distance from the ball to the nearest tracked player of each team. inf if none / no ball."""
-    dx = players[:, :, 0] - ball[:, None, 0]
-    dy = players[:, :, 1] - ball[:, None, 1]
-    dist = np.hypot(dx, dy)
+def velocity(xy, step=2):
+    """(..., 2) positions -> m/s velocity vectors by central difference over +/- step frames."""
+    out = np.full(xy.shape, np.nan, dtype=np.float32)
+    out[step:-step] = (xy[2 * step:] - xy[:-2 * step]) * (FPS / (2.0 * step))
+    return out
+
+
+def team_contacts(players, ball, team):
+    """For each team: distance from the ball to its nearest player, and the speed of the ball
+    relative to that player. inf / NaN where there is no ball or no player.
+
+    Relative speed is what separates control from proximity: a ball under control moves with the
+    player, a pass or a long ball in flight passes him at 10+ m/s.
+    """
+    dist = np.hypot(players[:, :, 0] - ball[:, None, 0], players[:, :, 1] - ball[:, None, 1])
     dist = np.where(np.isfinite(dist), dist, np.inf)
-    home = dist[:, team == 0].min(axis=1)
-    away = dist[:, team == 1].min(axis=1)
-    return home, away
+    v_players = velocity(players[:, :, :2])
+    v_ball = velocity(ball[:, :2])
+    rows = np.arange(len(ball))
+    out = []
+    for side in (0, 1):
+        slots = np.flatnonzero(team == side)
+        nearest = slots[np.argmin(dist[:, slots], axis=1)]
+        rel = v_ball - v_players[rows, nearest]
+        out.append((dist[rows, nearest], np.hypot(rel[:, 0], rel[:, 1])))
+    return out
 
 
 def out_of_bounds(ball, margin):
@@ -83,6 +100,11 @@ DEFENDING_CODES = {
     "defending in defensive third", "defending in middle third", "defending in attacking third",
     "defensive transition",
 }
+# Phases name a team's activity; zone tags name where the ball is (a cross into the box can be
+# cleared, a long ball can be lost), so they say less about who controls it and count half.
+ZONE_CODES = {"ball in final third", "ball in the box", "players in the box", "long ball",
+              "creating chances"}
+PHASE_CODES = (ATTACKING_CODES | DEFENDING_CODES) - ZONE_CODES - {"goals"}
 TEAM_TAGS = {"barcelona": 0, "atletic club": 1, "athletic club": 1}
 
 
@@ -107,6 +129,8 @@ def tagging_prior(events, n_frames):
         if side is None:
             continue
         sign = 1.0 if side == 0 else -1.0
+        if code in ZONE_CODES:
+            sign *= 0.5
         if code in ATTACKING_CODES:
             vote[start:end] += sign
         elif code in DEFENDING_CODES:
