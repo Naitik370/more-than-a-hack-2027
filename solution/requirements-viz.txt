@@ -1,0 +1,3 @@
+# Optional: only for solution/annotate.py (the explainer reel). The submission needs requirements.txt.
+-r requirements.txt
+opencv-python==4.11.0.86

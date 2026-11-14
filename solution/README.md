@@ -33,6 +33,7 @@ byte.
 | `pseudo.py` | self-supervised evidence: dead/live from Smart Tagging pseudo-labels, team shape from confident control frames |
 | `model.py` | the two Viterbi chains and every parameter, with where it comes from |
 | `diagnostics.py` | label-free comparison of variants: counts and agreement with Smart Tagging |
+| `annotate.py` | optional explainer reel: model labels, reasons and evidence drawn over four auto-picked clips of the tactical video (needs `requirements-viz.txt`; output stays in the gitignored `solution/cache/`) |
 
 ## What is not in here
 
