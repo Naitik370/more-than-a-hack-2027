@@ -94,8 +94,13 @@ Inside each alive spell, evidence in nats per second, positive meaning home:
   attacking, or −1 if the phase names it defending; zone tags count half. The prior adds 0.3
   nats/s while the ball is visible and 1.0 nats/s while it is missing.
 
+- **Restart taker.** The team that takes a restart has the ball, so it starts the alive spell,
+  and overruling it costs one turnover. The taker's team comes from the Set Pieces team tag when
+  Smart Tagging gives one (corners, goal kicks, free kicks). Otherwise it is the team of the player
+  at the ball in the last second before play resumes. Both are needed: before most corners the
+  tracking has lost the ball, so the taker cannot be seen.
+
 **Transitions.** A turnover arrives every ~15 s of live ball, which costs 5.9 nats per change.
-Each alive spell starts with no preference: whoever plays the restart is found from the evidence.
 
 ## 6. The possession rules we implemented
 
@@ -111,8 +116,9 @@ Each alive spell starts with no preference: whoever plays the restart is found f
   reversed costs 11.9. A touch where the ball stays with the new player for a fraction of a second
   pays for a change. A deflection, where the ball leaves fast, does not.
 - **Restarts.** A dead spell ends where the evidence for live play starts, typically at the kick.
-  The restarting team is whoever is then seen controlling the ball. Dead-ball ownership is not
-  modelled: dead is `D`.
+  The restarting team owns the ball from that frame (§5.2), so a corner swung into the box stays
+  with the attacking team until a defender controls it. Dead-ball ownership is not modelled: dead
+  is `D`.
 - **Abstention.** We never write `X` on graded frames. Every frame has a decoded state, and
   forward-filling an abstention would only reproduce the decoder's previous answer.
 
@@ -130,8 +136,11 @@ Each alive spell starts with no preference: whoever plays the restart is found f
    ranking proxy, not an accuracy. It chose control-with-relative-speed over proximity (0.84
    against 0.83), and it showed that zone codes agree less (56–69%) than phase codes (86–89%).
    That is why zone codes are half-weighted in the prior.
+3. **Restart team against the team-tagged Set Pieces** (26 with a visible restart). With no
+   restart prior, the first decoded team was right on 17. The nearest-player rule alone gets 18,
+   and with the tags 21. Tag agreement rose from 0.840 to 0.843.
 
-Final output over the 158,857 graded frames: 262 possessions (mean 12.8 s, median 8.3 s), 101 dead
+Final output over the 158,857 graded frames: 277 possessions (mean 12.1 s, median 7.3 s), 101 dead
 spells, 47.1% dead time, and home has 63% of the live ball.
 
 **Stability.** Scaling any one parameter by 0.7 or 1.3 changes at most 1.7% of graded frames. The
@@ -142,6 +151,9 @@ match statistics.
 
 ## 7. Limitations and what we would do next
 
+- **Restarts with no tag and no visible ball.** Throw-ins are not team-tagged, and the ball is often
+  missing just before one is taken. A rule from where the ball left the pitch and which team's
+  players crowd that area would cover them.
 - **Possession count is calibrated to a prior, not to the truth.** If the ground truth's notion of
   "controlled" is stricter or looser than ours, every possession boundary moves together. With
   labelled matches from other games (Metrica's open sample games, for example), we would fit the

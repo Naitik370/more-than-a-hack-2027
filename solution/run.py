@@ -83,6 +83,38 @@ def team_evidence(sig, p):
     return evidence
 
 
+def restart_sides(sig, events, p, first, last):
+    """Function: alive-spell start (block-relative) -> team taking that restart, or None.
+
+    Set Pieces tagged with a team (corners, goal kicks, free kicks) name it directly. Otherwise
+    the taker is the player at the ball during the last second before play resumes.
+    """
+    tagged = []
+    for event in events:
+        if (event["code"] or "").strip().lower() != "set pieces":
+            continue
+        side = F.TEAM_TAGS.get((event["tags"].get("Team") or "").strip().lower())
+        if side is not None:
+            tagged.append((event["start_frame"], side))
+    window = int(round(p["restart_window_s"] * F.FPS))
+    d_home, d_away = sig["d_home"], sig["d_away"]
+
+    def side_at(start):
+        s = first + start
+        for frame, side in (tagged if p["restart_use_tags"] else []):  # a tagged set piece started during this dead spell
+            if s - 60 * F.FPS <= frame <= s and not sig["alive"][frame:s].any():
+                return side
+        a, b = max(first, s - window), s + 1
+        dh, da = d_home[a:b], d_away[a:b]
+        near = np.minimum(dh, da) < p["restart_reach_m"]
+        if not near.any():
+            return None
+        home = int((dh[near] < da[near]).sum())
+        away = int(near.sum()) - home
+        return M.H if home > away else M.A if away > home else None
+    return side_at
+
+
 def predict(data, events, p=None):
     p = dict(M.PARAMS, **(p or {}))
     blocks = half_video_blocks(GAME)
@@ -91,10 +123,13 @@ def predict(data, events, p=None):
     team_ev = team_evidence(sig, p)
 
     labels = np.full(len(sig["present"]), "X", dtype="<U1")
+    sig["alive"] = np.zeros(len(labels), dtype=bool)
     for _, first, last in blocks:
         sl = slice(first, last + 1)
         dead = M.decode_alive(dead_ev[sl], p, F.FPS)
-        labels[sl] = M.LABELS[M.decode_team(team_ev[sl], ~dead, p, F.FPS)]
+        sig["alive"][sl] = ~dead
+        sides = restart_sides(sig, events, p, first, last) if p["use_restarts"] else None
+        labels[sl] = M.LABELS[M.decode_team(team_ev[sl], ~dead, p, F.FPS, sides)]
     sig["dead_evidence"] = dead_ev
     sig["team_evidence"] = team_ev
     return labels, sig

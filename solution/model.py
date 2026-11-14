@@ -57,6 +57,12 @@ PARAMS = {
     "control_gain": 84.0,
     "tag_gain_missing": 1.0,       # Smart Tagging phase team, when the ball is not visible
     "tag_gain_present": 0.3,
+    # --- restarts: the player who takes a restart has the ball, so its team starts the alive
+    # spell. Costs one turnover to overrule, as if the taker's possession had been observed.
+    "restart_reach_m": 3.0,        # the taker stands at the ball
+    "restart_window_s": 1.0,       # look at the last second of the dead spell
+    "use_restarts": True,
+    "restart_use_tags": True,      # Set Pieces team tags, when present, name the taker
 }
 
 
@@ -99,12 +105,20 @@ def decode_alive(dead_evidence, p, fps):
     return path == 1
 
 
-def decode_team(team_evidence, alive, p, fps):
-    """H/A over the alive frames; each alive spell is decoded on its own. + favours home."""
+def decode_team(team_evidence, alive, p, fps, restart_side=None):
+    """H/A over the alive frames; each alive spell is decoded on its own. + favours home.
+
+    restart_side(start) -> H, A or None names the team taking the restart that opens a spell.
+    """
     out = np.full(len(alive), D, dtype=np.int8)
-    trans = chain_costs([1.0 / (p["turnover_every_s"] * fps)] * 2)
+    p_turn = 1.0 / (p["turnover_every_s"] * fps)
+    trans = chain_costs([p_turn] * 2)
     for start, end in runs(alive):
         emit = np.zeros((end - start, 2))
         emit[:, 0] = team_evidence[start:end] / fps
-        out[start:end] = viterbi(emit, trans, np.log([0.5, 0.5]))
+        log_start = np.log([0.5, 0.5])
+        side = restart_side(start) if restart_side else None
+        if side is not None:
+            log_start = np.log([1 - p_turn, p_turn] if side == H else [p_turn, 1 - p_turn])
+        out[start:end] = viterbi(emit, trans, log_start)
     return out
