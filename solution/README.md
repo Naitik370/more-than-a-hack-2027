@@ -29,8 +29,8 @@ byte.
 |---|---|
 | `run.py` | entry point: data in, `frame,label` CSV out |
 | `data_cache.py` | parses the ATD text file once into numpy arrays (metres, video-frame indexed) |
-| `features.py` | ball speed, player activity, out-of-bounds, per-team contact, Smart Tagging prior |
-| `pseudo.py` | self-supervised dead/live evidence from Smart Tagging pseudo-labels |
+| `features.py` | ball speed, player activity, out-of-bounds, per-team contact, team shape, Smart Tagging prior |
+| `pseudo.py` | self-supervised evidence: dead/live from Smart Tagging pseudo-labels, team shape from confident control frames |
 | `model.py` | the two Viterbi chains and every parameter, with where it comes from |
 | `diagnostics.py` | label-free comparison of variants: counts and agreement with Smart Tagging |
 

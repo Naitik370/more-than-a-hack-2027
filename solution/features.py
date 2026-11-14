@@ -139,3 +139,57 @@ def tagging_prior(events, n_frames):
         elif code in DEFENDING_CODES:
             vote[start:end] -= sign
     return vote, set_piece
+
+
+# Team shape -------------------------------------------------------------------------------------
+
+SHAPE_FEATURES = ("advancing", "spread", "block offset", "in opponent half")
+
+
+def _team_mean(values, mask):
+    finite = np.isfinite(values) & mask[None, :]
+    n = finite.sum(axis=1)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        return np.where(n > 0, np.where(finite, values, 0).sum(axis=1) / n, np.nan)
+
+
+def _team_std(values, mask):
+    mean = _team_mean(values, mask)
+    return np.sqrt(_team_mean((values - mean[:, None]) ** 2, mask))
+
+
+def home_attacks_right(players, team):
+    """True if home attacks towards x = PITCH_LENGTH in this stretch of play.
+
+    The home goalkeeper is the regularly tracked home slot that stays closest to a goal line.
+    """
+    x = players[:, :, 0]
+    present = np.isfinite(x).mean(axis=0)
+    mean_x = _team_mean(x.T, np.ones(len(x), dtype=bool))  # per slot, over time
+    home = [i for i in np.flatnonzero(team == 0) if present[i] > 0.5]
+    keeper = min(home, key=lambda i: min(mean_x[i], PITCH_LENGTH - mean_x[i]))
+    return bool(mean_x[keeper] < PITCH_LENGTH / 2)
+
+
+def team_shape(players, team, half_width):
+    """(n, 4) features of the two teams' shape, home minus away, each oriented so that larger
+    means "looks like home has the ball": a team in possession pushes forward, spreads out to
+    make the pitch big, and moves its players into the opponents' half.
+
+    `players` must cover one half (one direction of play).
+    """
+    sign = 1.0 if home_attacks_right(players, team) else -1.0
+    # Home-attack coordinate: 0 at home's goal line, PITCH_LENGTH at the opponents'.
+    x = players[:, :, 0] if sign > 0 else PITCH_LENGTH - players[:, :, 0]
+    y = players[:, :, 1]
+    vx = velocity(players[:, :, :2])[:, :, 0] * sign
+    home, away = team == 0, team == 1
+    half = PITCH_LENGTH / 2
+    finite = np.isfinite(x)
+    features = np.stack([
+        _team_mean(vx, home) + _team_mean(vx, away),        # both advancing towards away's goal
+        (_team_std(x, home) + _team_std(y, home)) - (_team_std(x, away) + _team_std(y, away)),
+        _team_mean(x, home) - _team_mean(x, away),          # home's block ahead of away's
+        ((x > half) & finite & home[None]).sum(1) - ((x < half) & finite & away[None]).sum(1),
+    ], axis=1).astype(np.float64)
+    return np.stack([moving_mean(f, half_width) for f in features.T], axis=1)

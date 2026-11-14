@@ -63,3 +63,23 @@ def presence_llr(present, positive, negative, smoothing=5.0):
     p_pos = (present[positive].sum() + smoothing) / (positive.sum() + 2 * smoothing)
     p_neg = (present[negative].sum() + smoothing) / (negative.sum() + 2 * smoothing)
     return np.where(present, np.log(p_pos / p_neg), np.log((1 - p_pos) / (1 - p_neg)))
+
+
+def logistic_llr(features, target, train, ridge=1e-3, steps=25):
+    """Log-likelihood ratio log p(x | home) / p(x | away) from a logistic regression.
+
+    Fitted on the `train` frames, whose `target` (True = home) comes from our own confident
+    control readings, so no label is involved. The training-set prior odds are subtracted: the
+    chain supplies the prior, the evidence must not. NaN features give 0.
+    """
+    ok = train & np.isfinite(features).all(axis=1)
+    mean, std = features[ok].mean(axis=0), features[ok].std(axis=0)
+    design = lambda f: np.column_stack([np.ones(len(f)), (f - mean) / std])
+    z, t = design(features[ok]), target[ok].astype(float)
+    w = np.zeros(z.shape[1])
+    for _ in range(steps):  # Newton steps
+        prob = 1.0 / (1.0 + np.exp(-z @ w))
+        hessian = (z * (prob * (1 - prob))[:, None]).T @ z + ridge * np.eye(len(w))
+        w += np.linalg.solve(hessian, z.T @ (t - prob))
+    prior = np.log(t.mean() / (1 - t.mean()))
+    return np.nan_to_num(design(features) @ w - prior), w

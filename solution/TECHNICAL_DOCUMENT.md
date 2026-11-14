@@ -55,6 +55,9 @@ top-flight match statistics.
   59 Set Pieces instances, ~11.5k graded frames. The *live* set is the middle half of each Build
   Up, Progression, Creating Chances and Attacking Transition phase, at least 15 s from any set
   piece, ~27.7k frames. No person chose or corrected any of them.
+- **Self-training for team shape.** The team-shape model (§5.2) is trained on the ~28% of live
+  frames where our own control reading is unambiguous, and used everywhere else. Its targets come
+  from the tracking alone.
 - **The published 5-minute ground truth** was scored at four checkpoints to confirm the pipeline:
   frames aligned, labels meaning what we thought, file well-formed. No parameter was chosen by its
   score. Every choice was made with the label-free diagnostics in §6.
@@ -93,7 +96,19 @@ Inside each alive spell, evidence in nats per second, positive meaning home:
 - **Smart Tagging prior.** Each frame inside a tagged phase gets +1 for the team it names as
   attacking, or −1 if the phase names it defending; zone tags count half. The prior adds 0.3
   nats/s while the ball is visible and 1.0 nats/s while it is missing.
+- **Team shape.** A team in possession pushes up, spreads out and moves players into the
+  opponents' half. Four features describe this, each home minus away and smoothed over ±0.5 s:
+  - the teams' mean forward speed;
+  - spread (std of x plus std of y);
+  - the offset between the two teams' blocks;
+  - the players in the opponents' half.
 
+  The attacking direction comes from where the home goalkeeper stands in each half. A logistic
+  regression maps the features to a log-likelihood ratio, after removing the training set's
+  prior odds. Like every other term it counts once per second. It matters most where nobody is
+  clearly on the ball: passes, aerial duels, loose balls. Trained on one half and tested on the
+  other, it agrees with the confident control readings 80–82% of the time, against 64–68% for
+  always guessing the majority team. The coefficients have the same sign in both halves.
 - **Restart taker.** The team that takes a restart has the ball, so it starts the alive spell,
   and overruling it costs one turnover. The taker's team comes from the Set Pieces team tag when
   Smart Tagging gives one (corners, goal kicks, free kicks). Otherwise it is the team of the player
@@ -101,6 +116,7 @@ Inside each alive spell, evidence in nats per second, positive meaning home:
   tracking has lost the ball, so the taker cannot be seen.
 
 **Transitions.** A turnover arrives every ~15 s of live ball, which costs 5.9 nats per change.
+The control gain is recalibrated with team shape and restarts in place (73).
 
 ## 6. The possession rules we implemented
 
@@ -139,21 +155,35 @@ Inside each alive spell, evidence in nats per second, positive meaning home:
 3. **Restart team against the team-tagged Set Pieces** (26 with a visible restart). With no
    restart prior, the first decoded team was right on 17. The nearest-player rule alone gets 18,
    and with the tags 21. Tag agreement rose from 0.840 to 0.843.
+4. **Team shape.** Adding it raised tag agreement from 0.850 to 0.885, with the possession count
+   unchanged at ~270, and the restart check went to 24 of 26. Agreement keeps rising with a
+   larger weight (0.894 at 4×). Smart Tagging probably reads team shape too, so we did not follow
+   the proxy upwards. The weight is 1, the same once-per-second rule as every other term.
 
-Final output over the 158,857 graded frames: 277 possessions (mean 12.1 s, median 7.3 s), 101 dead
-spells, 47.1% dead time, and home has 63% of the live ball.
+**Tried and dropped:**
+- **An "other team restarts" rule** for balls going out of play. The tracking rarely sees the
+  ball cross the line, so it covered 5 of 26 restarts and got 2 right.
+- **Filling short ball gaps by interpolation.** No effect, because the gaps are long.
+- **Smoothing the control evidence.** Agreement moved by noise-sized amounts that did not rise
+  or fall consistently with the amount of smoothing.
 
-**Stability.** Scaling any one parameter by 0.7 or 1.3 changes at most 1.7% of graded frames. The
-possession count stays between 231 and 286. The rate constants (turnover, stoppage and dead-spell
-frequencies, and the tagging prior) move fewer than 0.6% of frames. The control constants (radius,
+Final output over the 158,857 graded frames: 266 possessions (mean 12.6 s, median 8.1 s), 101 dead
+spells, 47.1% dead time, and home has 62% of the live ball.
+
+**Stability.** Scaling any one parameter by 0.7 or 1.3 changes at most 1.5% of graded frames. The
+possession count stays between 238 and 291. The rate constants (turnover, stoppage and dead-spell
+frequencies, the tagging prior and the restart window) move fewer than 0.3% of frames. The
+team-shape constants move under 1%. The control constants (radius,
 relative speed and gain) matter most, which is why the gain is the one constant calibrated against
 match statistics.
 
 ## 7. Limitations and what we would do next
 
 - **Restarts with no tag and no visible ball.** Throw-ins are not team-tagged, and the ball is often
-  missing just before one is taken. A rule from where the ball left the pitch and which team's
-  players crowd that area would cover them.
+  missing just before one is taken. A ball-exit rule failed because the exit is rarely seen. A
+  throw-in detector, a player standing still just outside the touchline, would cover them.
+- **The team-shape model is fitted on the match it labels.** That is transductive self-training,
+  with no labels, but its errors correlate with those of the control reading it learns from.
 - **Possession count is calibrated to a prior, not to the truth.** If the ground truth's notion of
   "controlled" is stricter or looser than ours, every possession boundary moves together. With
   labelled matches from other games (Metrica's open sample games, for example), we would fit the

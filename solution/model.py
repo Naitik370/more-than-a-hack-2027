@@ -54,7 +54,13 @@ PARAMS = {
     # The one rate-like constant of the team chain: calibrated, without labels, so the match has
     # ~270 possessions -- turnovers (~200) plus restarts by the same team (~50 of ~100) in a
     # typical top-flight match. See solution/diagnostics.py.
-    "control_gain": 84.0,
+    "control_gain": 73.0,
+    # Team shape: a logistic model of who has the ball from the two teams' shape, trained on the
+    # frames where control is unambiguous. Its output is a log-likelihood ratio per observation;
+    # like every other evidence term it counts once per second.
+    "shape_gain": 1.0,
+    "shape_confident": 0.25,       # |control| above this is a training target
+    "shape_half_width_s": 0.5,
     "tag_gain_missing": 1.0,       # Smart Tagging phase team, when the ball is not visible
     "tag_gain_present": 0.3,
     # --- restarts: the player who takes a restart has the ball, so its team starts the alive

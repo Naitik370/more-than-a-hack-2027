@@ -60,8 +60,8 @@ def dead_evidence(sig, events, p, blocks):
     return evidence
 
 
-def team_evidence(sig, p):
-    """nats/s, + favours home."""
+def control_term(sig, p):
+    """In [-1, 1]: + when only a home player controls the ball, - when only an away player does."""
     speed = np.nan_to_num(sig["ball_speed"], nan=0.0)
     r, soft = p["control_radius_m"], p["control_softness_m"]
     with np.errstate(over="ignore"):
@@ -77,7 +77,32 @@ def team_evidence(sig, p):
         slow = 1.0
     else:
         slow = 1.0 / (1.0 + (speed / p["control_fast_mps"]) ** 4)
-    evidence = p["control_gain"] * slow * (c_home * (1 - c_away) - c_away * (1 - c_home))
+    return slow * (c_home * (1 - c_away) - c_away * (1 - c_home))
+
+
+def shape_evidence(sig, data, p, blocks, alive):
+    """Self-supervised team-shape log-likelihood ratio (nats per frame), + favours home.
+
+    The training targets are the frames where our own control reading is unambiguous; the model
+    then speaks for the frames where nobody is clearly on the ball (passes, loose balls, aerial
+    duels, missing ball). Fitted per match on its own tracking -- no label is involved.
+    """
+    n = len(alive)
+    shape = np.full((n, len(F.SHAPE_FEATURES)), np.nan)
+    half_width = int(round(p["shape_half_width_s"] * F.FPS))
+    for _, first, last in blocks:
+        sl = slice(first, last + 1)
+        shape[sl] = F.team_shape(data["players"][sl], data["team"], half_width)
+    control = sig["control"]
+    train = alive & sig["present"] & (np.abs(control) > p["shape_confident"])
+    llr, weights = pseudo.logistic_llr(shape, control > 0, train)
+    sig["shape_weights"] = weights
+    return llr
+
+
+def team_evidence(sig, p):
+    """nats/s, + favours home."""
+    evidence = p["control_gain"] * sig["control"] + p["shape_gain"] * sig["shape_llr"]
     tag = np.clip(sig["tag_vote"], -1, 1)
     evidence += np.where(sig["present"], p["tag_gain_present"], p["tag_gain_missing"]) * tag
     return evidence
@@ -120,14 +145,19 @@ def predict(data, events, p=None):
     blocks = half_video_blocks(GAME)
     sig = build_signals(data, events, p)
     dead_ev = dead_evidence(sig, events, p, blocks)
+    alive = np.zeros(len(dead_ev), dtype=bool)
+    for _, first, last in blocks:
+        alive[first:last + 1] = ~M.decode_alive(dead_ev[first:last + 1], p, F.FPS)
+    sig["control"] = control_term(sig, p)
+    sig["shape_llr"] = (shape_evidence(sig, data, p, blocks, alive) if p["shape_gain"]
+                        else np.zeros(len(alive)))
     team_ev = team_evidence(sig, p)
 
     labels = np.full(len(sig["present"]), "X", dtype="<U1")
-    sig["alive"] = np.zeros(len(labels), dtype=bool)
+    sig["alive"] = alive
     for _, first, last in blocks:
         sl = slice(first, last + 1)
-        dead = M.decode_alive(dead_ev[sl], p, F.FPS)
-        sig["alive"][sl] = ~dead
+        dead = ~alive[sl]
         sides = restart_sides(sig, events, p, first, last) if p["use_restarts"] else None
         labels[sl] = M.LABELS[M.decode_team(team_ev[sl], ~dead, p, F.FPS, sides)]
     sig["dead_evidence"] = dead_ev

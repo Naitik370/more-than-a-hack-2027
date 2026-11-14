@@ -85,7 +85,10 @@ def report(name, data, events, p, calibrate=True):
 if __name__ == "__main__":
     data = data_cache.load()
     events = load_smart_tagging.load()
-    report("proximity + ball speed", data, events, {})
+    report("current", data, events, {})
+    report("no team shape", data, events, {"shape_gain": 0.0})
+    report("no restart prior", data, events, {"use_restarts": False})
+    report("proximity + ball speed", data, events, {"control_relative_mps": 0.0})
     for radius in (1.0, 1.5, 2.0):
         for rel in (1.5, 2.0, 3.0):
             report("radius {} relative {}".format(radius, rel), data, events,
