@@ -1,6 +1,6 @@
 # Ball possession from automatic tracking with two sticky Markov chains
 
-More than a Hack 2027 — Phase 1 technical document.
+More than a Hack 2027 — Phase 1 technical document. Code: https://github.com/Naitik370/more-than-a-hack-2027
 
 ## 1. Approach in one paragraph
 
