@@ -187,8 +187,8 @@ class Explainer:
             for _, first, last in self.blocks:
                 sl = slice(first, last + 1)
                 self.home_right[sl] = F.home_attacks_right(data["players"][sl], data["team"])
-                sides = run.restart_sides(sig, events, p, first, last)
-                no_tag = run.restart_sides(sig, events, dict(p, restart_use_tags=False),
+                sides = run.restart_sides(sig, run.set_piece_tags(events), p, first, last)
+                no_tag = run.restart_sides(sig, run.set_piece_tags(events), dict(p, restart_use_tags=False),
                                            first, last)
                 for a, _ in M.runs(sig["alive"][sl]):
                     side = sides(a)

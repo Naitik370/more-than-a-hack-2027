@@ -26,6 +26,8 @@ import data_cache  # noqa: E402
 import features as F  # noqa: E402
 import load_smart_tagging  # noqa: E402
 
+# The pre-calibration way of setting the control gain (a typical possession count). The gain is now
+# fitted on the public sample games (calibrate.py); report(..., calibrate=True) still shows this.
 TARGET_POSSESSIONS = 270
 
 
@@ -61,7 +63,7 @@ def tag_agreement(labels, sig, events):
     return float(((labels[m] == "H") == (want[m] > 0)).mean())
 
 
-def calibrate_gain(data, events, p, target=TARGET_POSSESSIONS, lo=5.0, hi=200.0, steps=10):
+def calibrate_gain(data, events, p, target=TARGET_POSSESSIONS, lo=5.0, hi=500.0, steps=10):
     """Control gain that gives `target` possessions (count is monotone in the gain)."""
     for _ in range(steps):
         mid = np.sqrt(lo * hi)
@@ -73,13 +75,13 @@ def calibrate_gain(data, events, p, target=TARGET_POSSESSIONS, lo=5.0, hi=200.0,
     return float(np.sqrt(lo * hi))
 
 
-def report(name, data, events, p, calibrate=True):
+def report(name, data, events, p, calibrate=False):
     p = dict(p, tag_gain_missing=0.0, tag_gain_present=0.0)
     if calibrate:
         p["control_gain"] = calibrate_gain(data, events, p)
     labels, sig = run.predict(data, events, p)
     print("{:<28} gain {:>6.1f}  tag agree {:.4f}  {}".format(
-        name, p["control_gain"], tag_agreement(labels, sig, events), run.summary(labels)))
+        name, p.get("control_gain", run.M.PARAMS["control_gain"]), tag_agreement(labels, sig, events), run.summary(labels)))
 
 
 if __name__ == "__main__":

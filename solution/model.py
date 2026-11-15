@@ -32,43 +32,52 @@ import numpy as np
 H, A, D = 0, 1, 2
 LABELS = np.array(["H", "A", "D"])
 
+# Constants marked [cal] were fitted on Metrica's three public sample games, which have
+# human-annotated events (solution/calibrate.py). Hand labels on other games are allowed; nothing
+# is fitted on the provided game. Leave-one-game-out, the fitted values raised spellF1 on every
+# held-out game (0.616->0.654, 0.619->0.650, 0.590->0.617). The values used are those the folds
+# agreed on; the score is flat around them.
 PARAMS = {
-    # --- rates of events, from typical top-flight matches
+    # --- rates of events
     "stoppage_every_s": 30.0,      # ~110-130 stoppages over ~55-60 min of live ball
-    "dead_spell_s": 20.0,          # a restart typically takes 10-30 s
-    "turnover_every_s": 15.0,      # ~200-250 changes of possession over the live ball
+    "dead_spell_s": 10.0,          # [cal] (prior: 20)
+    "turnover_every_s": 20.0,      # [cal] (prior: 15)
     # --- alive/dead
-    "dead_weight": 2.0,            # gives ~100 dead spells: a typical LaLiga match has ~100-110 restarts
+    "dead_weight": 4.0,            # [cal] (prior: 2, from a typical restart count)
     "oob_margin_m": 1.0,           # tracking noise; the whole ball must be over the line
-    "oob_dead": 10.0,              # nats/s for a ball clearly outside the pitch
+    "oob_dead": 20.0,              # [cal] nats/s for a ball clearly outside the pitch (prior: 10)
+    "alive_lead_s": 0.0,           # shift of every alive/dead boundary, earlier (see calibrate.py)
     "activity_half_width_s": 1.0,
     "activity_edges": [0, .5, .75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 99],
     "speed_edges": [0, 1, 2, 4, 8, 15, 99],
     # --- who has it (nats per second, + favours home)
     # Control = the ball is within reach of a player AND moving with him. Proximity alone counts
     # every pass and long ball that flies past a player.
-    "control_radius_m": 1.5,       # within reach of a player
+    "control_radius_m": 1.25,      # [cal] within reach of a player (prior: 1.5)
     "control_softness_m": 0.3,     # tracking error on a player's position
     "control_relative_mps": 2.0,   # ball speed relative to the player: a dribbling touch
     "control_fast_mps": 8.0,       # (fallback when control_relative_mps is 0)
-    # The one rate-like constant of the team chain: calibrated, without labels, so the match has
-    # ~270 possessions -- turnovers (~200) plus restarts by the same team (~50 of ~100) in a
-    # typical top-flight match. See solution/diagnostics.py.
-    "control_gain": 73.0,
+    # [cal] Before calibration this was set, without labels, so the match had ~270 possessions
+    # (73). The sample games have 300-350 annotated possessions per match, and the fitted gain
+    # gets much closer to that.
+    "control_gain": 230.0,
     # Team shape: a logistic model of who has the ball from the two teams' shape, trained on the
     # frames where control is unambiguous. Its output is a log-likelihood ratio per observation;
     # like every other evidence term it counts once per second.
-    "shape_gain": 1.0,
+    "shape_gain": 0.5,             # [cal] (prior: 1, the once-per-second rule)
     "shape_confident": 0.25,       # |control| above this is a training target
     "shape_half_width_s": 0.5,
     "tag_gain_missing": 1.0,       # Smart Tagging phase team, when the ball is not visible
     "tag_gain_present": 0.3,
     # --- restarts: the player who takes a restart has the ball, so its team starts the alive
     # spell. Costs one turnover to overrule, as if the taker's possession had been observed.
-    "restart_reach_m": 3.0,        # the taker stands at the ball
+    "restart_reach_m": 1.5,        # [cal] the taker stands at the ball (prior: 3)
     "restart_window_s": 1.0,       # look at the last second of the dead spell
     "use_restarts": True,
     "restart_use_tags": True,      # Set Pieces team tags, when present, name the taker
+    "restart_use_thrower": True,   # a player on the touchline is taking a throw-in
+    "thrower_margin_m": 0.5,       # on or beyond the line, within tracking error
+    "thrower_min_s": 0.2,          # seen there for at least this long
 }
 
 

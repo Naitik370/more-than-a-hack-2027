@@ -65,3 +65,6 @@ env/
 
 # solution: derived match data, never commit
 solution/cache/
+
+# Public Metrica sample games used for calibration (git clone, not redistributed here)
+external/
